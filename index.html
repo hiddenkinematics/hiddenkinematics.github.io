@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Exploring Hidden Kinematics</title>
+<meta name="description" content="Learning to Explore Hidden Kinematics for Articulated Object Manipulation. A particle belief over joint type and axis is rendered as a per-point articulation flow, and the policy is rewarded for the entropy each interaction removes.">
+<meta property="og:title" content="Learning to Explore Hidden Kinematics for Articulated Object Manipulation">
+<meta property="og:description" content="The robot learns to probe articulated objects whose appearance implies the wrong joint.">
+<meta property="og:image" content="static/images/hero_cabinets_light.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Outfit:wght@300;400;500;600&family=Google+Sans:wght@400;500;700&family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});"></script>
+<style>
+/* One committed light look: white page, neutral greys, the studio render as the hero. */
+:root{
+  color-scheme:light;
+  --ink:#161616;
+  --ink-2:#3a3a3a;
+  --stone:#777777;
+  --stone-2:#b0b0b0;
+  --cream:#ffffff;
+  --band:#dadada;
+  --paper:#ffffff;
+  --white:#ffffff;
+  --rule:rgba(0,0,0,.08);
+  --rule-2:rgba(0,0,0,.15);
+  --rev:#cf3a26;          /* revolute: the flow-arrow red used in every figure */
+  --rev-soft:rgba(207,58,38,.08);
+  --pri:#2b72b8;          /* prismatic: the belief-plot blue */
+  --pri-soft:rgba(43,114,184,.09);
+  --ok:#2f7d4f;
+  --serif:'Cormorant Garamond',Georgia,'Times New Roman',serif;
+  --sans:'Noto Sans','Helvetica Neue',Arial,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,Menlo,monospace;
+  --col:800px;
+  --wide:1140px;
+  --shadow:0 1px 0 rgba(255,255,255,.8) inset,0 24px 60px -36px rgba(30,30,30,.38);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;background:#ffffff}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:17.5px;line-height:1.7;-webkit-font-smoothing:antialiased}
+img,video,canvas{display:block;max-width:100%}
+a{color:inherit}
+p{margin:0 0 1em}
+b,strong{font-weight:600}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--rev);outline-offset:3px;border-radius:4px}
+
+.page{padding-inline:16px}
+.col{max-width:var(--col);margin-inline:auto}
+.wide{max-width:var(--wide);margin-inline:auto}
+
+/* ---------- hero: studio render fading into the white page, title centred on it ---------- */
+.hero{position:relative;display:flex;flex-direction:column;align-items:center;margin-inline:-16px;padding:clamp(16px,2.2vw,28px) 16px clamp(18px,2.5vw,28px);text-align:center;
+  background:linear-gradient(var(--band) 0,var(--band) calc(100% - 120px),var(--cream) 100%)}
+.hero-fig{position:relative;width:min(900px,100%)}
+.hero-art img{width:100%;height:auto;display:block;
+  -webkit-mask-image:linear-gradient(to right,transparent 0,#000 10%,#000 90%,transparent 100%),linear-gradient(to bottom,transparent 0,#000 10%,#000 90%,transparent 100%);
+  -webkit-mask-composite:source-in;
+          mask-image:linear-gradient(to right,transparent 0,#000 10%,#000 90%,transparent 100%),linear-gradient(to bottom,transparent 0,#000 10%,#000 90%,transparent 100%);
+          mask-composite:intersect}
+.hero-title{position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);z-index:1;padding-inline:16px}
+.hero-title::before{content:"";position:absolute;left:50%;top:50%;width:min(760px,96%);height:130%;transform:translate(-50%,-50%);z-index:-1;pointer-events:none;
+  background:radial-gradient(ellipse 50% 50% at 50% 50%,rgba(236,236,236,.5) 0%,rgba(236,236,236,.28) 50%,transparent 100%)}
+.hero-title h1,.hero-title .authors,.hero-title .affil{text-shadow:0 0 14px rgba(240,240,240,.85),0 0 3px rgba(240,240,240,.9)}
+.hero-title .authors,.hero-title .affil{text-shadow:0 0 2px #fff,0 0 8px rgba(255,255,255,.95),0 0 18px rgba(255,255,255,.85),0 0 30px rgba(255,255,255,.6)}
+.hero-title .authors{margin-top:.8em}
+.hero-title .affil{margin-bottom:0}
+.affil .eq-note{margin-right:1.2em;font-size:.92em}
+.affil .eq-note sup{color:#a94833;margin-right:1px}
+.hero-text{margin-top:clamp(0px,.5vw,6px)}
+.hero h1{font-family:'Google Sans',var(--sans);font-weight:700;font-size:clamp(1.8rem,3.2vw,2.75rem);line-height:1.12;letter-spacing:-.015em;margin:0 auto;text-wrap:balance}
+.hero h1 em{font-style:normal;font-weight:700;color:#a94833}
+.hero h1 .l2{display:block;font-size:.62em;font-weight:400;font-style:normal;color:var(--ink-2);letter-spacing:-.005em;margin-top:.3em}
+.authors{display:flex;flex-wrap:wrap;justify-content:center;gap:.2rem 1.6rem;font-family:'Google Sans',var(--sans);font-weight:500;font-size:1.05rem}
+.authors a{color:var(--ink);text-decoration:none;text-underline-offset:3px}
+.authors a:hover{text-decoration:underline;text-decoration-color:#a94833}
+.authors sup{color:#a94833;font-weight:500;margin-left:1px}
+.authors span{color:var(--ink)}
+.authors{margin-top:0}
+.affil{color:var(--ink-2);font-weight:500;font-size:.95rem;margin:.3rem 0 1.4rem}
+.btns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
+.btn{font-family:'Google Sans',var(--sans);display:inline-flex;align-items:center;gap:8px;padding:9px 18px;border-radius:999px;font-size:.92rem;font-weight:500;text-decoration:none;border:1px solid var(--ink);background:var(--ink);color:var(--paper);transition:transform .2s}
+.btn:hover{transform:translateY(-1px)}
+.btn.soon{background:rgba(255,255,255,.78);color:var(--ink-2);border-color:var(--rule-2);cursor:default;backdrop-filter:blur(4px)}
+.btn.soon:hover{transform:none}
+.btn.soon small{font-size:.7rem;color:var(--stone)}
+.btn svg{width:16px;height:16px;fill:currentColor;flex:none}
+.btn svg.hf{width:20px;height:18px;fill:none}
+
+/* ---------- Fig. 1: one sliding row ---------- */
+#teaser{margin-top:clamp(24px,4vw,48px);max-width:880px}
+.fig1title{text-align:left;font-size:clamp(1.15rem,1.8vw,1.4rem);margin:0 0 12px}
+.fig1{gap:12px}
+.fig1>.fbox{width:min(460px,86vw);margin:0;background:var(--paper);border:1px solid var(--rule);border-radius:16px;padding:10px 10px 12px;box-shadow:var(--shadow)}
+.fbox .who{font-family:var(--serif);font-size:1.2rem;font-weight:600;padding:0 4px 8px}
+.fbox.ours .who{color:var(--rev)}
+.pair2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.fcell .what{font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--stone);padding:0 2px 5px;white-space:nowrap}
+.fcell .what i{font-style:normal}
+.fcell .what i.rv{color:var(--rev)} .fcell .what i.pr{color:var(--pri)}
+.fig1cap{text-align:center;margin-top:12px}
+@media (min-width:900px){.rail.fig1{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:visible}.rail.fig1>.fbox{width:auto}}
+/* ---------- (legacy grid) ---------- */
+.teaser{max-width:560px;margin-inline:auto;background:var(--paper);border:1px solid var(--rule);border-radius:18px;padding:clamp(10px,2vw,20px);box-shadow:var(--shadow)}
+.tgrid{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);gap:8px 10px;align-items:center}
+.tgrid .ch{font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--stone);text-align:center}
+.tgrid .ch b{color:var(--ink);font-weight:500}
+.tgrid .rh{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--serif);font-size:1.05rem;font-weight:600;text-align:center}
+.tgrid .rh.ours{color:var(--rev)}
+.tcell{position:relative;border-radius:10px;overflow:hidden;background:#d9d6d0;aspect-ratio:4/3}
+.tcell video{width:100%;height:100%;object-fit:cover}
+.mark{position:absolute;right:7px;bottom:7px;display:grid;place-items:center;padding:3px;border-radius:50%;background:rgba(255,255,255,.93);box-shadow:0 2px 10px rgba(0,0,0,.12)}
+.mark i{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;color:#fff;font-style:normal;font-size:.78rem;font-weight:600;line-height:1}
+.mark.ok i{background:var(--ok)} .mark.ok{color:var(--ok)}
+.mark.fail i{background:var(--rev)} .mark.fail{color:var(--rev)}
+
+/* ---------- sections ---------- */
+.sec{padding-block:clamp(56px,8vw,96px) 0;scroll-margin-top:56px}
+.label{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--rev);margin-bottom:.6rem}
+.label::after{content:"";height:1px;width:48px;background:currentColor;opacity:.45}
+h2{font-family:var(--serif);font-weight:600;font-size:clamp(1.7rem,3vw,2.2rem);line-height:1.15;letter-spacing:-.008em;margin:0 0 .8rem;text-wrap:balance}
+h2 em{font-style:italic;color:var(--rev)}
+h3{font-family:var(--serif);font-weight:600;font-size:clamp(1.55rem,2.4vw,1.95rem);line-height:1.18;margin:0 0 .6rem;text-wrap:balance}
+.lede{font-size:1.08rem;color:var(--ink-2);max-width:66ch}
+.body p{max-width:68ch}
+figcaption,.cap{font-size:.93rem;color:var(--stone);line-height:1.6}
+figcaption b{color:var(--ink-2);font-weight:600}
+.fig-no{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2);margin-right:6px}
+figure{margin:0}
+.frame{background:var(--white);border:1px solid var(--rule);border-radius:14px;overflow:hidden;box-shadow:var(--shadow)}
+.frame.pad{padding:clamp(8px,1.6vw,18px)}
+.callout{font-family:var(--serif);font-size:clamp(1.3rem,2.3vw,1.6rem);line-height:1.45;color:var(--ink);text-wrap:pretty;margin:0}
+.callout b{font-weight:600;background:linear-gradient(transparent 62%,rgba(207,58,38,.16) 62%)}
+.contrib{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin-top:32px;border-top:1px solid var(--rule-2)}
+.contrib div{padding:18px 18px 4px 0}
+.contrib div+div{padding-left:18px;border-left:1px solid var(--rule)}
+.contrib .k{font-family:var(--mono);font-size:.68rem;letter-spacing:.14em;color:var(--rev)}
+.contrib h4{font-family:var(--serif);font-size:1.3rem;font-weight:600;margin:.25rem 0 .35rem;line-height:1.2}
+.contrib p{font-size:.95rem;color:var(--ink-2);margin:0}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:500;padding:1px 9px;border-radius:999px;white-space:nowrap;vertical-align:1px}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.chip.rev{color:var(--rev);background:var(--rev-soft)}
+.chip.pri{color:var(--pri);background:var(--pri-soft)}
+.chip.neutral{color:var(--ink-2);background:rgba(0,0,0,.06)}
+
+/* ---------- carousel (shared) ---------- */
+.car-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 16px}
+.car-head.col{margin-inline:auto}
+.seg{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--paper);border:1px solid var(--rule);overflow-x:auto;scrollbar-width:none;max-width:100%}
+.seg::-webkit-scrollbar{display:none}
+.seg button{border:0;background:transparent;font-size:.9rem;font-weight:500;color:var(--stone);padding:7px 16px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:color .2s,background .2s}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-selected="true"]{background:var(--ink);color:var(--paper)}
+.arrows{display:flex;gap:8px}
+.arrows button{width:40px;height:40px;border-radius:50%;border:1px solid var(--rule-2);background:var(--paper);cursor:pointer;display:grid;place-items:center;transition:background .2s,opacity .2s}
+.arrows button:hover{background:var(--white)}
+.arrows button:disabled{opacity:.35;cursor:default}
+.arrows svg{width:16px;height:16px;fill:none;stroke:var(--ink);stroke-width:1.8}
+.rail{display:flex;gap:18px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;scrollbar-width:none;padding-bottom:6px;overscroll-behavior-x:contain}
+.rail::-webkit-scrollbar{display:none}
+.rail>*{scroll-snap-align:start;flex:none}
+.dots{display:flex;justify-content:center;gap:6px;margin-top:14px}
+.dots span{width:6px;height:6px;border-radius:3px;background:var(--stone-2);transition:width .3s,background .3s}
+.dots span.on{width:22px;background:var(--ink)}
+
+/* method slides */
+.slide{width:100%;display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:clamp(22px,4vw,48px);align-items:center;background:var(--paper);border:1px solid var(--rule);border-radius:18px;padding:clamp(14px,2.4vw,26px);box-shadow:var(--shadow)}
+.slide .kicker{font-family:var(--mono);font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--stone);display:block;margin-bottom:.45rem}
+.slide .txt p{font-size:1.02rem;color:var(--ink-2)}
+.slide .txt p:last-child{margin-bottom:0}
+.eq{overflow-x:auto;overflow-y:hidden;position:relative;padding:4px 0;margin:.2rem 0 .9rem;font-size:1rem}
+.katex{position:relative}
+.katex-display{margin:.4em 0}
+
+/* video card */
+.vcard{position:relative;background:var(--white);border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.vcard video{width:100%;height:auto;background:var(--white)}
+.vcard .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--rule);font-size:.88rem;color:var(--stone)}
+.vcard .bar b{color:var(--ink);font-weight:500}
+.expand{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:8px;border:0;background:rgba(255,255,255,.88);display:grid;place-items:center;cursor:pointer;opacity:0;transition:opacity .2s;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+.expand svg{width:15px;height:15px;fill:var(--ink)}
+.vcard:hover .expand,.expand:focus-visible{opacity:1}
+@media (hover:none){.expand{opacity:1}}
+
+/* sim gallery rail */
+#gallery>.vcard{width:min(560px,86vw);box-shadow:var(--shadow)}
+#gallery video{aspect-ratio:8/3;object-fit:cover}
+
+/* ---------- 3D ArticuRiddle viewer ---------- */
+.viewer{position:relative;background:#ffffff;border:1px solid var(--rule);border-radius:20px;overflow:hidden;box-shadow:var(--shadow)}
+.viewer canvas{width:100%;height:clamp(260px,32vw,400px);cursor:grab;touch-action:none}
+.viewer canvas:active{cursor:grabbing}
+.vtag{position:absolute;transform:translate(-50%,-100%);pointer-events:none;text-align:center;white-space:nowrap;transition:opacity .3s}
+.vtag .n{display:block;font-family:var(--mono);font-size:.64rem;letter-spacing:.14em;text-transform:uppercase;color:var(--stone)}
+.vtag .j{display:inline-block;margin-top:3px}
+.viewer.flat canvas,.viewer.flat .vtag,.viewer.flat .vhint,.viewer.flat .vbar{display:none}
+.vfallback{width:100%;height:auto}
+.vload{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--stone);pointer-events:none;transition:opacity .4s}
+.vhint{position:absolute;left:16px;top:14px;font-size:.8rem;color:var(--stone);pointer-events:none}
+.vbar{display:flex;flex-wrap:wrap;align-items:center;gap:14px 18px;padding:14px 18px;border-top:1px solid var(--rule);background:rgba(255,255,255,.85)}
+.play{width:40px;height:40px;border-radius:50%;border:0;background:var(--ink);color:var(--paper);display:grid;place-items:center;cursor:pointer;flex:none}
+.play svg{width:14px;height:14px;fill:currentColor}
+.scrub{flex:1 1 220px;display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--stone)}
+.scrub input{flex:1;accent-color:var(--rev);height:24px}
+.reveal{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--rule-2);background:var(--white);border-radius:999px;padding:7px 14px 7px 8px;font-size:.88rem;font-weight:500;cursor:pointer}
+.reveal .sw{width:30px;height:18px;border-radius:9px;background:var(--stone-2);position:relative;transition:background .2s}
+.reveal .sw::after{content:"";position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .2s}
+.reveal[aria-pressed="true"] .sw{background:var(--rev)}
+.reveal[aria-pressed="true"] .sw::after{transform:translateX(12px)}
+.riddle{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:18px;align-items:start;margin-top:26px}
+.plist{display:flex;flex-direction:column;gap:10px}
+.plist h4{margin:0 0 6px;font-family:var(--mono);font-size:.66rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--stone)}
+.plist .grp{display:flex;flex-direction:column;gap:4px}
+.plist button{display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;border:1px solid transparent;background:transparent;border-radius:10px;padding:5px 10px;cursor:pointer;font-size:.88rem;color:var(--ink-2);transition:background .2s,border-color .2s}
+.plist button small{font-family:var(--mono);font-size:.66rem;color:var(--stone-2)}
+.plist button:hover{background:rgba(0,0,0,.04)}
+.plist button[aria-selected="true"]{background:var(--paper);border-color:var(--rule-2);color:var(--ink);box-shadow:0 6px 18px -12px rgba(30,30,30,.4)}
+.plist .note{font-size:.84rem;color:var(--stone);line-height:1.5;margin:4px 2px 0}
+
+/* policy-on-pair rail */
+#pairs>.pair{width:min(460px,84vw)}
+.pair{background:var(--paper);border:1px solid var(--rule);border-radius:16px;padding:10px;box-shadow:var(--shadow)}
+.pair .two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px}
+.pair .v{position:relative;border-radius:9px;overflow:hidden;aspect-ratio:4/3;background:#d9d6d0}
+.pair .v video{width:100%;height:100%;object-fit:cover}
+.pair .tag{position:absolute;left:6px;top:6px;font-family:var(--mono);font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:5px;background:rgba(255,255,255,.92);color:var(--ink-2)}
+.pair .v.ar .tag{background:var(--ink);color:var(--paper)}
+.pair .meta{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;padding:10px 4px 2px}
+.pair .meta .what{font-family:var(--serif);font-size:1.15rem;font-weight:600}
+
+/* bibtex */
+.bib{position:relative}
+.bib pre{margin:0;background:var(--ink);color:#efe8da;border-radius:14px;padding:22px 24px;overflow-x:auto;font-family:var(--mono);font-size:.82rem;line-height:1.65}
+.copy{position:absolute;top:10px;right:10px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#efe8da;border-radius:6px;padding:3px 10px;font-size:.75rem;cursor:pointer}
+footer{padding-block:72px 48px;text-align:center;font-size:.84rem;color:var(--stone)}
+
+/* lightbox */
+.lb{position:fixed;inset:0;background:rgba(18,16,12,.88);display:grid;place-items:center;padding:24px;z-index:80}
+.lb video{max-width:min(1400px,100%);max-height:88vh;border-radius:10px;background:#fff}
+.lb button{position:absolute;top:calc(14px + env(safe-area-inset-top,0px));right:16px;border:0;background:rgba(255,255,255,.12);color:#fff;width:38px;height:38px;border-radius:50%;font-size:20px;cursor:pointer}
+
+@media (prefers-reduced-motion:no-preference){
+  .rise{animation:rise 1s cubic-bezier(.2,.7,.2,1) both}
+  .d1{animation-delay:.1s}.d2{animation-delay:.2s}.d3{animation-delay:.32s}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .hero-art img{animation:settle 2.4s cubic-bezier(.2,.7,.2,1) both}
+  @keyframes settle{from{opacity:0;transform:scale(1.02)}to{opacity:1;transform:none}}
+}
+@media (prefers-reduced-motion:reduce){.rail{scroll-behavior:auto}}
+
+@media (max-width:860px){
+  .slide{grid-template-columns:minmax(0,1fr)}
+  .contrib{grid-template-columns:minmax(0,1fr)}
+  .contrib div+div{padding-left:0;border-left:0;border-top:1px solid var(--rule)}
+}
+@media (max-width:640px){
+  body{font-size:16.5px}
+  .hero-fig{display:flex;flex-direction:column}
+  .hero-title{position:static;transform:none;margin:14px 0 4px}
+  .hero-title::before{display:none}
+  .hero-art{order:2}
+  .tgrid{gap:6px}
+  .tgrid .rh{font-size:1rem}
+  .mark{right:5px;bottom:5px;padding:2px}
+  .mark i{width:16px;height:16px;font-size:.66rem}
+  .arrows{display:none}
+  .riddle{grid-template-columns:minmax(0,1fr)}
+  .plist{flex-direction:row;flex-wrap:wrap}
+  .plist .grp{flex:1 1 160px}
+  .vhint{display:none}
+}
+
+/* ---------- glass: buttons and display panels ---------- */
+:root{
+  --glass-bg:linear-gradient(180deg,rgba(255,255,255,.78),rgba(250,251,253,.58));
+  --glass-edge:rgba(255,255,255,.85);
+  --glass-shadow:inset 0 1px 0 rgba(255,255,255,.95),inset 0 -1px 0 rgba(0,0,0,.03),0 1px 2px rgba(20,24,40,.06),0 12px 32px -14px rgba(20,24,40,.22);
+}
+.btn.soon,.fbox,.slide,.viewer,.pair,#gallery>.vcard,.frame,.seg,.arrows button,.plist button[aria-selected="true"]{
+  background:var(--glass-bg);
+  -webkit-backdrop-filter:blur(16px) saturate(1.5);backdrop-filter:blur(16px) saturate(1.5);
+  border:1px solid var(--glass-edge);
+  box-shadow:var(--glass-shadow)}
+.btn.soon{box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 1px 2px rgba(20,24,40,.08),0 8px 22px -10px rgba(20,24,40,.3)}
+.btn.soon:hover{transform:translateY(-1px)}
+.fbox,.slide,.viewer,.pair,#gallery>.vcard,.frame{border-color:rgba(0,0,0,.06)}
+.seg button[aria-selected="true"]{box-shadow:0 4px 12px -4px rgba(0,0,0,.35)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ================= HERO ================= -->
+<header class="hero" id="top">
+  <div class="hero-fig">
+    <div class="hero-art" aria-hidden="true"><img src="static/images/hero_cabinets_light.jpg" alt="" fetchpriority="high"></div>
+    <div class="hero-title"><h1 class="rise">Learning to Explore <em>Hidden Kinematics</em><span class="l2">for Articulated Object Manipulation</span></h1>
+      <div class="authors rise d1">
+        <span>Ruiyao Liu<sup>*</sup></span>
+        <span>Boshu Lei<sup>*</sup></span>
+        <span>Zhuoyang Pan</span>
+        <span>Kostas Daniilidis</span>
+      </div>
+      <div class="affil rise d1"><span class="eq-note"><sup>*</sup>Equal contribution</span>University of Pennsylvania</div>
+    </div>
+  </div>
+  <div class="hero-text">
+    <div class="btns rise d2">
+      <!-- TODO: swap class "soon" for real links -->
+      <a class="btn soon" aria-disabled="true"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5z"/></svg>Paper</a>
+      <a class="btn soon" aria-disabled="true"><svg viewBox="0 0 24 24"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2.1c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0c2.2-1.5 3.2-1.2 3.2-1.2.6 1.6.2 2.8.1 3.1.7.8 1.2 1.9 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>Code</a>
+      <a class="btn soon" aria-disabled="true"><svg class="hf" viewBox="0 0 95 88" fill="none" aria-hidden="true"> <path fill="#FFD21E" d="M47.21 76.5a34.75 34.75 0 1 0 0-69.5 34.75 34.75 0 0 0 0 69.5Z" /> <path fill="#FF9D0B" d="M81.96 41.75a34.75 34.75 0 1 0-69.5 0 34.75 34.75 0 0 0 69.5 0Zm-73.5 0a38.75 38.75 0 1 1 77.5 0 38.75 38.75 0 0 1-77.5 0Z" /> <path fill="#3A3B45" d="M58.5 32.3c1.28.44 1.78 3.06 3.07 2.38a5 5 0 1 0-6.76-2.07c.61 1.15 2.55-.72 3.7-.32ZM34.95 32.3c-1.28.44-1.79 3.06-3.07 2.38a5 5 0 1 1 6.76-2.07c-.61 1.15-2.56-.72-3.7-.32Z" /> <path fill="#FF323D" d="M46.96 56.29c9.83 0 13-8.76 13-13.26 0-2.34-1.57-1.6-4.09-.36-2.33 1.15-5.46 2.74-8.9 2.74-7.19 0-13-6.88-13-2.38s3.16 13.26 13 13.26Z" /> <path fill="#3A3B45" fill-rule="evenodd" d="M39.43 54a8.7 8.7 0 0 1 5.3-4.49c.4-.12.81.57 1.24 1.28.4.68.82 1.37 1.24 1.37.45 0 .9-.68 1.33-1.35.45-.7.89-1.38 1.32-1.25a8.61 8.61 0 0 1 5 4.17c3.73-2.94 5.1-7.74 5.1-10.7 0-2.34-1.57-1.6-4.09-.36l-.14.07c-2.31 1.15-5.39 2.67-8.77 2.67s-6.45-1.52-8.77-2.67c-2.6-1.29-4.23-2.1-4.23.29 0 3.05 1.46 8.06 5.47 10.97Z" clip-rule="evenodd" /> <path fill="#FF9D0B" d="M70.71 37a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5ZM24.21 37a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5ZM17.52 48c-1.62 0-3.06.66-4.07 1.87a5.97 5.97 0 0 0-1.33 3.76 7.1 7.1 0 0 0-1.94-.3c-1.55 0-2.95.59-3.94 1.66a5.8 5.8 0 0 0-.8 7 5.3 5.3 0 0 0-1.79 2.82c-.24.9-.48 2.8.8 4.74a5.22 5.22 0 0 0-.37 5.02c1.02 2.32 3.57 4.14 8.52 6.1 3.07 1.22 5.89 2 5.91 2.01a44.33 44.33 0 0 0 10.93 1.6c5.86 0 10.05-1.8 12.46-5.34 3.88-5.69 3.33-10.9-1.7-15.92-2.77-2.78-4.62-6.87-5-7.77-.78-2.66-2.84-5.62-6.25-5.62a5.7 5.7 0 0 0-4.6 2.46c-1-1.26-1.98-2.25-2.86-2.82A7.4 7.4 0 0 0 17.52 48Zm0 4c.51 0 1.14.22 1.82.65 2.14 1.36 6.25 8.43 7.76 11.18.5.92 1.37 1.31 2.14 1.31 1.55 0 2.75-1.53.15-3.48-3.92-2.93-2.55-7.72-.68-8.01.08-.02.17-.02.24-.02 1.7 0 2.45 2.93 2.45 2.93s2.2 5.52 5.98 9.3c3.77 3.77 3.97 6.8 1.22 10.83-1.88 2.75-5.47 3.58-9.16 3.58-3.81 0-7.73-.9-9.92-1.46-.11-.03-13.45-3.8-11.76-7 .28-.54.75-.76 1.34-.76 2.38 0 6.7 3.54 8.57 3.54.41 0 .7-.17.83-.6.79-2.85-12.06-4.05-10.98-8.17.2-.73.71-1.02 1.44-1.02 3.14 0 10.2 5.53 11.68 5.53.11 0 .2-.03.24-.1.74-1.2.33-2.04-4.9-5.2-5.21-3.16-8.88-5.06-6.8-7.33.24-.26.58-.38 1-.38 3.17 0 10.66 6.82 10.66 6.82s2.02 2.1 3.25 2.1c.28 0 .52-.1.68-.38.86-1.46-8.06-8.22-8.56-11.01-.34-1.9.24-2.85 1.31-2.85Z" /> <path fill="#FFD21E" d="M38.6 76.69c2.75-4.04 2.55-7.07-1.22-10.84-3.78-3.77-5.98-9.3-5.98-9.3s-.82-3.2-2.69-2.9c-1.87.3-3.24 5.08.68 8.01 3.91 2.93-.78 4.92-2.29 2.17-1.5-2.75-5.62-9.82-7.76-11.18-2.13-1.35-3.63-.6-3.13 2.2.5 2.79 9.43 9.55 8.56 11-.87 1.47-3.93-1.71-3.93-1.71s-9.57-8.71-11.66-6.44c-2.08 2.27 1.59 4.17 6.8 7.33 5.23 3.16 5.64 4 4.9 5.2-.75 1.2-12.28-8.53-13.36-4.4-1.08 4.11 11.77 5.3 10.98 8.15-.8 2.85-9.06-5.38-10.74-2.18-1.7 3.21 11.65 6.98 11.76 7.01 4.3 1.12 15.25 3.49 19.08-2.12Z" /> <path fill="#FF9D0B" d="M77.4 48c1.62 0 3.07.66 4.07 1.87a5.97 5.97 0 0 1 1.33 3.76 7.1 7.1 0 0 1 1.95-.3c1.55 0 2.95.59 3.94 1.66a5.8 5.8 0 0 1 .8 7 5.3 5.3 0 0 1 1.78 2.82c.24.9.48 2.8-.8 4.74a5.22 5.22 0 0 1 .37 5.02c-1.02 2.32-3.57 4.14-8.51 6.1-3.08 1.22-5.9 2-5.92 2.01a44.33 44.33 0 0 1-10.93 1.6c-5.86 0-10.05-1.8-12.46-5.34-3.88-5.69-3.33-10.9 1.7-15.92 2.78-2.78 4.63-6.87 5.01-7.77.78-2.66 2.83-5.62 6.24-5.62a5.7 5.7 0 0 1 4.6 2.46c1-1.26 1.98-2.25 2.87-2.82A7.4 7.4 0 0 1 77.4 48Zm0 4c-.51 0-1.13.22-1.82.65-2.13 1.36-6.25 8.43-7.76 11.18a2.43 2.43 0 0 1-2.14 1.31c-1.54 0-2.75-1.53-.14-3.48 3.91-2.93 2.54-7.72.67-8.01a1.54 1.54 0 0 0-.24-.02c-1.7 0-2.45 2.93-2.45 2.93s-2.2 5.52-5.97 9.3c-3.78 3.77-3.98 6.8-1.22 10.83 1.87 2.75 5.47 3.58 9.15 3.58 3.82 0 7.73-.9 9.93-1.46.1-.03 13.45-3.8 11.76-7-.29-.54-.75-.76-1.34-.76-2.38 0-6.71 3.54-8.57 3.54-.42 0-.71-.17-.83-.6-.8-2.85 12.05-4.05 10.97-8.17-.19-.73-.7-1.02-1.44-1.02-3.14 0-10.2 5.53-11.68 5.53-.1 0-.19-.03-.23-.1-.74-1.2-.34-2.04 4.88-5.2 5.23-3.16 8.9-5.06 6.8-7.33-.23-.26-.57-.38-.98-.38-3.18 0-10.67 6.82-10.67 6.82s-2.02 2.1-3.24 2.1a.74.74 0 0 1-.68-.38c-.87-1.46 8.05-8.22 8.55-11.01.34-1.9-.24-2.85-1.31-2.85Z" /> <path fill="#FFD21E" d="M56.33 76.69c-2.75-4.04-2.56-7.07 1.22-10.84 3.77-3.77 5.97-9.3 5.97-9.3s.82-3.2 2.7-2.9c1.86.3 3.23 5.08-.68 8.01-3.92 2.93.78 4.92 2.28 2.17 1.51-2.75 5.63-9.82 7.76-11.18 2.13-1.35 3.64-.6 3.13 2.2-.5 2.79-9.42 9.55-8.55 11 .86 1.47 3.92-1.71 3.92-1.71s9.58-8.71 11.66-6.44c2.08 2.27-1.58 4.17-6.8 7.33-5.23 3.16-5.63 4-4.9 5.2.75 1.2 12.28-8.53 13.36-4.4 1.08 4.11-11.76 5.3-10.97 8.15.8 2.85 9.05-5.38 10.74-2.18 1.69 3.21-11.65 6.98-11.76 7.01-4.31 1.12-15.26 3.49-19.08-2.12Z" /> </svg>Hugging Face</a>
+    </div>
+  </div>
+</header>
+
+<!-- ================= TEASER ================= -->
+<section class="wide" id="teaser">
+  <h2 class="fig1title">Visual appearance can be <em>misleading.</em></h2>
+  <div class="rail fig1" id="fig1">
+    <figure class="fbox">
+      <div class="who">PartManip</div>
+      <div class="pair2">
+        <div class="fcell">
+          <div class="what">Original · <i class="pr">prismatic</i></div>
+          <div class="tcell"><video data-src="static/media/teaser_base_orig.mp4" poster="static/posters/teaser_base_orig.jpg" muted loop playsinline preload="none"></video><span class="mark ok" role="img" aria-label="success"><i>✓</i></span></div>
+        </div>
+        <div class="fcell">
+          <div class="what">Modified · <i class="rv">revolute</i></div>
+          <div class="tcell"><video data-src="static/media/teaser_base_mod.mp4" poster="static/posters/teaser_base_mod.jpg" muted loop playsinline preload="none"></video><span class="mark fail" role="img" aria-label="failure"><i>✕</i></span></div>
+        </div>
+      </div>
+    </figure>
+    <figure class="fbox ours">
+      <div class="who">Ours</div>
+      <div class="pair2">
+        <div class="fcell">
+          <div class="what">Original · <i class="pr">prismatic</i></div>
+          <div class="tcell"><video data-src="static/media/teaser_ours_orig.mp4" poster="static/posters/teaser_ours_orig.jpg" muted loop playsinline preload="none"></video><span class="mark ok" role="img" aria-label="success"><i>✓</i></span></div>
+        </div>
+        <div class="fcell">
+          <div class="what">Modified · <i class="rv">revolute</i></div>
+          <div class="tcell"><video data-src="static/media/teaser_ours_mod.mp4" poster="static/posters/teaser_ours_mod.jpg" muted loop playsinline preload="none"></video><span class="mark ok" role="img" aria-label="success"><i>✓</i></span></div>
+        </div>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= OVERVIEW ================= -->
+<section class="sec col" id="overview">
+  <div class="label">Overview</div>
+  <p class="callout">We keep a <b>belief</b> over how a part is jointed, show it to the policy as a per-point <b>articulation flow</b>, and reward the policy for the <b>uncertainty each interaction removes</b>.</p>
+</section>
+
+<!-- ================= ABSTRACT ================= -->
+<section class="sec col body" id="abstract">
+  <div class="label">Abstract</div>
+  <p>The kinematics of an articulated object is often ambiguous from vision alone. Interaction resolves the ambiguity, and active perception methods exploit this by searching for the single action that most sharpens a belief over the kinematic parameters at each step. Such greedy search cannot be extended over a horizon without forward models of the contact and inertial dynamics, which are themselves unknown. We instead amortize action selection into training.</p>
+  <p>We maintain a belief distribution over joint type and parameters, initialized from a generative prior and updated by Bayesian filtering on the observed part motion. To condition the policy on this belief, we render it as a per-point articulation flow field, the motion that the current posterior predicts for every point on the object. Carrying the inductive bias of articulated motion, this representation generalizes better than a latent encoding of the belief or flow tracked from observation. We train the policy with reinforcement learning, rewarding the entropy that each interaction removes from the posterior, so that informative exploration becomes learned behavior rather than a search at every step.</p>
+  <p>Our method outperforms previous approaches across door and drawer manipulation on the PartManip benchmark, and on ArticuRiddle, a new dataset of objects whose appearance implies the wrong articulation.</p>
+</section>
+
+<!-- ================= METHOD ================= -->
+<section class="sec wide" id="method">
+  <div class="col">
+    <div class="label">Method</div>
+    <h2>Belief, flow, and information gain</h2>
+    <p class="lede">A generative prior seeds a set of articulation hypotheses. Each step, the belief becomes a flow field the policy observes, the policy acts, the observed motion updates the belief, and the entropy it removes is paid back as reward.</p>
+  </div>
+  <figure class="frame pad" style="margin-top:24px">
+    <img src="static/images/pipeline.jpg" alt="Pipeline: generative prior initializes particles; each hypothesis becomes a flow field; weighted flow and point cloud go to the actor; observed motion updates weights through a Bayes filter; entropy drop is the information reward for PPO." loading="lazy">
+  </figure>
+  <p class="cap" style="margin-top:10px">Pipeline overview. Step through the four parts below.</p>
+
+  <div class="car-head">
+    <div class="seg" role="tablist" aria-label="Method steps" id="stepTabs">
+      <button role="tab" aria-selected="true">Belief</button>
+      <button role="tab" aria-selected="false">Flow</button>
+      <button role="tab" aria-selected="false">Entropy</button>
+      <button role="tab" aria-selected="false">Reward</button>
+    </div>
+    <div class="arrows" data-for="steps">
+      <button aria-label="Previous step" data-dir="-1"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button aria-label="Next step" data-dir="1"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+  </div>
+
+  <div class="rail" id="steps">
+    <article class="slide">
+      <div class="vcard">
+        <video data-src="static/media/belief_particles.mp4" poster="static/posters/belief_particles.jpg" muted loop playsinline preload="none"></video>
+        <button class="expand" aria-label="Enlarge video"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
+      </div>
+      <div class="txt">
+        <span class="kicker">Articulation belief</span>
+        <h3>A belief over joint type and parameters</h3>
+        <p>Each particle \(\theta^{(k)}=(c^{(k)},d^{(k)})\) is a joint type <span class="chip rev">revolute</span> <span class="chip pri">prismatic</span> <span class="chip neutral">fixed</span> with its axis and pivot, drawn from the NAP generative prior and weighted by how well it explains the observed motion:</p>
+        <div class="eq">$$w_k \propto \exp\!\Big(-\tfrac{1}{2\sigma^2}\sum_j\big\|(\mathbf{x}'_j-\mathbf{x}_j)-\mathbf{f}_j(\theta^{(k)},\delta q_t)\big\|^2\Big)$$</div>
+        <p>Resampling keeps the hypotheses that keep explaining the motion.</p>
+      </div>
+    </article>
+
+    <article class="slide">
+      <div class="vcard">
+        <video data-src="static/media/flow_hypotheses.mp4" poster="static/posters/flow_hypotheses.jpg" muted loop playsinline preload="none"></video>
+        <button class="expand" aria-label="Enlarge video"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
+      </div>
+      <div class="txt">
+        <span class="kicker">Belief → flow</span>
+        <h3>The belief, rendered as flow</h3>
+        <p>The policy acts on point clouds, but the belief lives in joint space. Every hypothesis predicts a motion for every point: tangent to the swept circle for a revolute joint, uniform along the axis for a prismatic one. Fields are normalized per type and summed with the posterior weights, lifting each point from \(\mathbb{R}^6\) to \(\mathbb{R}^9\).</p>
+        <p>Recomputed every step, the flow is an implicit memory of past interactions. As the part moves, the hypothesis weights collapse onto the true axis.</p>
+      </div>
+    </article>
+
+    <article class="slide">
+      <div class="vcard">
+        <video data-src="static/media/belief_entropy.mp4" poster="static/posters/belief_entropy.jpg" muted loop playsinline preload="none"></video>
+        <button class="expand" aria-label="Enlarge video"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
+      </div>
+      <div class="txt">
+        <span class="kicker">Belief entropy</span>
+        <h3>How much is still unknown</h3>
+        <p>Particle weights alone mislead: once particles gather around the true axis their weights become similar, so weight entropy is high exactly when the belief has converged. We keep the type term exact and estimate each branch with a weighted kernel density over particle positions:</p>
+        <div class="eq">$$\mathbf{H}[b_t]=\mathbf{H}[P_t(c)]+\sum_{c\in\{r,p\}}P_t(c)\,\widehat{\mathbf{H}}[b_t(d\mid c)]$$</div>
+      </div>
+    </article>
+
+    <article class="slide">
+      <div class="vcard">
+        <video data-src="static/media/info_schedule.mp4" poster="static/posters/info_schedule.jpg" muted loop playsinline preload="none"></video>
+        <button class="expand" aria-label="Enlarge video"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>
+      </div>
+      <div class="txt">
+        <span class="kicker">Information reward</span>
+        <h3>Pay for the entropy removed</h3>
+        <div class="eq">$$R_{\mathrm{info},t}=\mathbf{H}[b_t]-\mathbf{H}[b_{t+1}]$$</div>
+        <p>A difference of entropies, not a negated entropy. It vanishes once the belief stops moving, so each nat can be earned only once and standing still pays nothing.</p>
+        <p>A privileged state expert is distilled into the vision policy with DAgger, then fine-tuned with PPO on \(R=R_{\mathrm{task}}+\lambda_i R_{\mathrm{info}}\).</p>
+      </div>
+    </article>
+  </div>
+  <div class="dots" id="stepDots" aria-hidden="true"><span class="on"></span><span></span><span></span><span></span></div>
+</section>
+
+<!-- ================= ARTICURIDDLE ================= -->
+<section class="sec wide" id="articuriddle">
+  <div class="col">
+    <div class="label">Benchmark</div>
+    <h2>ArticuRiddle</h2>
+    <p class="lede">Objects derived from PartManip where geometric cues point the wrong way: either the joint is swapped while the look stays the same, or the handle is moved or rotated so it suggests the wrong motion. Left: the PartManip original. Right: its ArticuRiddle edit.</p>
+  </div>
+
+  <div class="riddle">
+  <div class="viewer" id="viewer">
+    <canvas id="stage" aria-label="Interactive 3D view of a PartManip cabinet and its ArticuRiddle edit"></canvas>
+    <div class="vtag" id="tagL"><span class="n">PartManip</span><span class="j" id="jL"></span></div>
+    <div class="vtag" id="tagR"><span class="n">ArticuRiddle</span><span class="j" id="jR"></span></div>
+    <div class="vhint">Drag to orbit</div>
+    <div class="vload" id="vload">Loading 3D</div>
+    <div class="vbar">
+      <button class="play" id="vplay" aria-label="Pause"><svg viewBox="0 0 24 24" id="vplayIcon"><path d="M6 5h4v14H6zm8 0h4v14h-4z"/></svg></button>
+      <label class="scrub">Closed<input type="range" id="vopen" min="0" max="1000" value="0" aria-label="Opening">Open</label>
+      <button class="reveal" id="vreveal" aria-pressed="false"><span class="sw"></span>Reveal joints</button>
+    </div>
+  </div>
+  <div class="plist" id="pairPick" role="tablist" aria-label="Choose a pair"></div>
+  </div>
+
+</section>
+
+<!-- ================= RESULTS ================= -->
+<section class="sec wide" id="results">
+  <div class="car-head col" style="margin-top:0;align-items:end">
+    <div>
+      <div class="label">Results</div>
+      <h2 style="margin:0">The policy on each pair</h2>
+    </div>
+    <div class="arrows" data-for="pairs">
+      <button aria-label="Previous pair" data-dir="-1"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button aria-label="Next pair" data-dir="1"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+  </div>
+  <div class="rail" id="pairs"></div>
+</section>
+
+<!-- ================= SIM ROLLOUTS ================= -->
+<section class="sec wide" id="rollouts" style="padding-top:clamp(40px,6vw,64px)">
+  <div class="col">
+    <h2>What the policy <em>sees</em></h2>
+    <p class="lede">PartManip objects in IsaacGym, each paired with the point cloud the policy observes. Red arrows are the articulation flow from the current belief; many drawers start with a revolute-looking prior and switch to translation once the part moves.</p>
+  </div>
+  <div class="car-head">
+    <div class="seg" role="tablist" aria-label="Object category">
+      <button role="tab" aria-selected="true" data-cat="door" class="cat">Doors</button>
+      <button role="tab" aria-selected="false" data-cat="drawer" class="cat">Drawers</button>
+    </div>
+    <div class="arrows" data-for="gallery">
+      <button aria-label="Previous clip" data-dir="-1"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+      <button aria-label="Next clip" data-dir="1"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+    </div>
+  </div>
+  <div class="rail" id="gallery" role="tabpanel"></div>
+</section>
+
+<!-- ================= BIBTEX ================= -->
+<section class="sec col" id="bibtex">
+  <div class="label">Citation</div>
+  <h2>BibTeX</h2>
+  <!-- TODO: BibTeX goes here (restore the .bib block with the copy button) -->
+  <p class="cap">Coming soon.</p>
+</section>
+
+<footer class="col">Learning to Explore Hidden Kinematics · project page</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+  const EXPAND = '<button class="expand" aria-label="Enlarge video"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zm10 0h6v6h-2V6h-4zM4 14h2v4h4v2H4zm14 0h2v6h-6v-2h4z"/></svg></button>';
+
+  /* ================= videos: lazy play / sync groups ================= */
+  const io = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      const v = e.target;
+      if (e.isIntersecting) {
+        if (!v.getAttribute('src') && v.dataset.src) v.src = v.dataset.src;
+        const g = v.closest('[data-sync]');
+        if (g) syncPlay(g); else v.play().catch(()=>{});
+      } else if (!v.paused) v.pause();
+    });
+  }, {threshold:.35}) : null;
+  function watch(root){
+    root.querySelectorAll('video[data-src]').forEach(v => {
+      if (io) io.observe(v); else { v.src = v.dataset.src; v.loop = true; v.autoplay = true; }
+    });
+  }
+  function syncPlay(group){
+    const vids = [...group.querySelectorAll('video')];
+    vids.forEach(v => { if (!v.getAttribute('src')) v.src = v.dataset.src; });
+    if (!group._wired) {
+      group._wired = true;
+      vids.forEach(v => v.addEventListener('ended', () => {
+        if (vids.every(x => x.ended)) vids.forEach(x => { x.currentTime = 0; x.play().catch(()=>{}); });
+      }));
+    }
+    vids.forEach(v => { if (!v.ended) v.play().catch(()=>{}); });
+  }
+
+  /* ================= carousels ================= */
+  function railIndex(rail){
+    const kids = [...rail.children]; if (!kids.length) return 0;
+    const x = rail.scrollLeft; let best = 0, bd = 1e9;
+    kids.forEach((k,i) => { const d = Math.abs(k.offsetLeft - rail.offsetLeft - x); if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+  function railGo(rail, i){
+    const kids = rail.children; i = Math.max(0, Math.min(kids.length - 1, i));
+    rail.scrollTo({left: kids[i].offsetLeft - rail.offsetLeft});
+  }
+  document.querySelectorAll('.arrows').forEach(a => {
+    const rail = document.getElementById(a.dataset.for);
+    const [prev, next] = a.querySelectorAll('button');
+    const upd = () => {
+      prev.disabled = rail.scrollLeft < 4;
+      next.disabled = rail.scrollLeft + rail.clientWidth > rail.scrollWidth - 4;
+    };
+    a.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      railGo(rail, railIndex(rail) + (+b.dataset.dir));
+    });
+    rail.addEventListener('scroll', upd, {passive:true}); addEventListener('resize', upd); rail._upd = upd; setTimeout(upd, 50);
+  });
+
+  /* method steps: tabs + dots follow the rail */
+  const steps = document.getElementById('steps');
+  const stepTabs = [...document.querySelectorAll('#stepTabs button')];
+  const stepDots = [...document.querySelectorAll('#stepDots span')];
+  stepTabs.forEach((t,i) => t.addEventListener('click', () => railGo(steps, i)));
+  let stepRaf;
+  steps.addEventListener('scroll', () => {
+    cancelAnimationFrame(stepRaf);
+    stepRaf = requestAnimationFrame(() => {
+      const i = railIndex(steps);
+      stepTabs.forEach((t,j) => t.setAttribute('aria-selected', String(i === j)));
+      stepDots.forEach((d,j) => d.classList.toggle('on', i === j));
+    });
+  }, {passive:true});
+
+  /* ================= policy-on-pair videos ================= */
+  const pairVids = [
+    [1,'kin','Drawer → bottom-hinged flap'],[4,'kin','Drawer → side-hinged door'],
+    [2,'kin','Drawer → bottom-hinged flap'],[3,'kin','Hinge moved to the other edge'],
+    [5,'app','Handle moved'],[6,'app','Handle moved']
+  ];
+  const pairsRail = document.getElementById('pairs');
+  pairsRail.innerHTML = pairVids.map(([i,k,what]) => `
+    <div class="pair">
+      <div class="two" data-sync>
+        <div class="v"><video data-src="static/media/pair${i}_pm.mp4" poster="static/posters/pair${i}_pm.jpg" muted playsinline preload="none"></video><span class="tag">PartManip</span></div>
+        <div class="v ar"><video data-src="static/media/pair${i}_ar.mp4" poster="static/posters/pair${i}_ar.jpg" muted playsinline preload="none"></video><span class="tag">ArticuRiddle</span></div>
+      </div>
+      <div class="meta"><span class="what">${what}</span>${k==='kin'?'<span class="chip rev">kinematic edit</span>':'<span class="chip pri">appearance edit</span>'}</div>
+    </div>`).join('');
+
+  /* ================= simulation gallery ================= */
+  const clips = {
+    door: [['door_45001-link_1','45001'],['door_41452-link_0','41452 · flip-down'],['door_45384-link_0','45384'],['door_45162-link_0','45162'],
+           ['door_45378-link_1','45378'],['door_44781-link_0','44781'],['door_45189-link_0','45189'],['door_45354-link_1','45354']],
+    drawer: [['drawer_40147-link_1','40147','revolute → prismatic'],['drawer_40417-link_2','40417','revolute → prismatic'],
+             ['drawer_46045-link_1','46045','revolute → prismatic'],['drawer_46981-link_2','46981','revolute → prismatic'],
+             ['drawer_47254-link_1','47254','revolute → prismatic'],['drawer_46544-link_2','46544'],['drawer_46549-link_3','46549'],['drawer_47296-link_2','47296']]
+  };
+  const gallery = document.getElementById('gallery');
+  function renderGallery(cat){
+    if (io) gallery.querySelectorAll('video').forEach(v => io.unobserve(v));
+    gallery.innerHTML = clips[cat].map(([f,name,note]) => `
+      <div class="vcard"><video data-src="static/videos/${f}.mp4" poster="static/posters/${f}.jpg" muted loop playsinline preload="none"></video>${EXPAND}</div>`).join('');
+    gallery.scrollLeft = 0; watch(gallery); gallery._upd && gallery._upd();
+  }
+  document.querySelectorAll('button.cat').forEach(t => t.addEventListener('click', () => {
+    document.querySelectorAll('button.cat').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+    renderGallery(t.dataset.cat);
+  }));
+
+  watch(document);
+  renderGallery('door');
+
+  /* ================= lightbox ================= */
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.expand'); if (!b) return;
+    const src = b.parentElement.querySelector('video');
+    const lb = document.createElement('div'); lb.className = 'lb'; lb.setAttribute('role','dialog'); lb.setAttribute('aria-modal','true');
+    lb.innerHTML = `<video src="${src.currentSrc || src.dataset.src}" controls autoplay muted loop playsinline></video><button aria-label="Close">×</button>`;
+    const close = () => { lb.remove(); document.removeEventListener('keydown', onKey); b.focus(); };
+    const onKey = ev => { if (ev.key === 'Escape') close(); };
+    lb.addEventListener('click', ev => { if (ev.target === lb || ev.target.tagName === 'BUTTON') close(); });
+    document.addEventListener('keydown', onKey);
+    document.body.appendChild(lb); lb.querySelector('button').focus();
+  });
+
+
+  /* ================= 3D ArticuRiddle viewer ================= */
+  const PAIRS = [
+    ['cfS_04_door_45756-link_1','Drawer → side door','45756','swap'],
+    ['cfS_09_door_48169-link_3','Drawer → side door','48169','swap'],
+    ['cfH_17_drawer_45687-link_1_flap','Drawer → lift-up door','45687','swap'],
+    ['cfH_13_drawer_47178-link_2_flapdown','Drawer → drop-down door','47178','swap'],
+    ['cfS_11_drawer_45378-link_1','Door → drawer','45378','swap'],
+    ['cfH_01_door_45189-link_3_slide','Door → sliding door','45189','swap'],
+    ['cfH_04_door_46616-link_0','Door · handle moved','46616','handle'],
+    ['cfH_05_door_46002-link_2','Door · handle moved','46002','handle'],
+    ['cfH_20_drawer_48517-link_1','Drawer · handle moved','48517','handle'],
+    ['cfH_15_drawer_45636-link_2','Drawer · handle rotated','45636','handle']
+  ];
+  const pick = document.getElementById('pairPick');
+  const grp = (key, title, note) => `<div class="grp"><h4>${title}</h4>` +
+    PAIRS.map((p,i) => p[3] === key ? `<button role="tab" aria-selected="${i===0}" data-i="${i}">${p[1]}</button>` : '').join('') +
+    `<p class="note">${note}</p></div>`;
+  pick.innerHTML = grp('swap','Joint swapped','Same look, the other joint type.') + grp('handle','Handle edited','Same joint; the handle is moved or rotated to suggest another motion.');
+
+  const vload = document.getElementById('vload');
+  const viewerEl = document.getElementById('viewer');
+  // static render of the same pair, used when WebGL or loading fails
+  function fallback(i, err){
+    viewerEl.classList.add('flat');
+    let img = viewerEl.querySelector('.vfallback');
+    if (!img) { img = document.createElement('img'); img.className = 'vfallback'; img.alt = 'Rendered pair: PartManip original (left) and ArticuRiddle edit (right)'; viewerEl.insertBefore(img, viewerEl.firstChild); }
+    img.src = `static/riddle3d/${PAIRS[i][0]}.jpg`;
+    vload.style.opacity = 1;
+    vload.innerHTML = `<span style="background:rgba(255,255,255,.9);padding:4px 10px;border-radius:6px">3D view could not load${err ? ' · ' + String(err && err.message || err).slice(0, 80) : ''}</span>`;
+    vload.style.placeItems = 'end center'; vload.style.paddingBottom = '76px';
+  }
+  if (!window.THREE || !THREE.GLTFLoader) {
+    pick.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; pick.querySelectorAll('button').forEach(x => x.setAttribute('aria-selected', String(x === b))); fallback(+b.dataset.i); });
+    fallback(0, 'WebGL library unavailable'); return;
+  }
+
+  const canvas = document.getElementById('stage');
+  const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, .05, 50);
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true; controls.dampingFactor = .08; controls.enablePan = false;
+  controls.minPolarAngle = .15; controls.maxPolarAngle = Math.PI/2 - .04;
+
+  scene.add(new THREE.HemisphereLight(0xfffaf0, 0xb8ad9c, .85));
+  const sun = new THREE.DirectionalLight(0xfff4e2, 1.25);
+  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -.0004; sun.shadow.radius = 4;
+  scene.add(sun); scene.add(sun.target);
+  const fill = new THREE.DirectionalLight(0xe8eefc, .35); scene.add(fill);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.ShadowMaterial({opacity:.16}));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+  const world = new THREE.Group(); world.rotation.x = -Math.PI/2; scene.add(world);  // data is z-up
+  const loader = new THREE.GLTFLoader();
+  const GLB_EXT = '.glb';
+  const cache = {};
+  let cur = null, openT = 0, playing = true, dir = 1, reveal = false, visible = true;
+
+  function fetchPair(slug){
+    if (cache[slug]) return cache[slug];
+    return cache[slug] = Promise.all([
+      fetch(`static/riddle3d/${slug}${GLB_EXT}`).then(r => { if (!r.ok) throw r.status; return r.arrayBuffer(); })
+        .then(buf => new Promise((res, rej) => {
+          // GLTFLoader picks ImageBitmapLoader (fetch on blob: URLs) when createImageBitmap exists;
+          // hide it while the parser is constructed so textures load through <img> instead.
+          const cib = window.createImageBitmap;
+          try { window.createImageBitmap = undefined; loader.parse(buf, '', res, rej); }
+          finally { window.createImageBitmap = cib; }
+        })),
+      fetch(`static/riddle3d/${slug}.json`).then(r => r.json())
+    ]).then(([gltf, kf]) => build(gltf.scene, kf));
+  }
+
+  const tmpQ = new THREE.Quaternion(), tmpQ2 = new THREE.Quaternion();
+  function build(root, kf){
+    root.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = o.receiveShadow = true;
+        const ms = Array.isArray(o.material) ? o.material : [o.material];
+        ms.forEach(m => { m.side = THREE.DoubleSide; if ('metalness' in m) { m.metalness = 0; m.roughness = .72; } });
+      }
+    });
+    const nodes = kf.bodies.map(n => root.getObjectByName(n));
+    const setPose = (node, p) => { if (!node) return; node.position.set(p[0], p[1], p[2]); node.quaternion.set(p[3], p[4], p[5], p[6]); };
+    kf.rest.forEach((p,i) => setPose(nodes[i], p));
+    const group = new THREE.Group(); group.add(root);
+
+    // joint glyphs from the part's rest → open motion (the moving link is the first moving body of each actor)
+    const glyphs = new THREE.Group(); glyphs.visible = false;
+    const last = kf.frames[kf.frames.length - 1];
+    ['orig','edit'].forEach(actor => {
+      const mi = kf.moving.findIndex(i => kf.bodies[i].startsWith(actor + '__link'));
+      if (mi < 0) return;
+      const bi = kf.moving[mi], node = nodes[bi];
+      const P0 = new THREE.Matrix4().compose(new THREE.Vector3(...kf.rest[bi].slice(0,3)), new THREE.Quaternion(...kf.rest[bi].slice(3)), new THREE.Vector3(1,1,1));
+      const P1 = new THREE.Matrix4().compose(new THREE.Vector3(...last[mi].slice(0,3)), new THREE.Quaternion(...last[mi].slice(3)), new THREE.Vector3(1,1,1));
+      const T = P1.clone().multiply(P0.clone().invert());
+      // root is not parented yet, so world matrices here are in data space (z-up)
+      root.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(node);
+      const c = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const q = new THREE.Quaternion().setFromRotationMatrix(T), ang = 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+      const t = new THREE.Vector3().setFromMatrixPosition(T);
+      const isRev = ang > .05;
+      const col = isRev ? 0xcf3a26 : 0x2b72b8;
+      const mat = new THREE.MeshBasicMaterial({color: col, depthTest: false, transparent: true, opacity: .95, toneMapped: false});
+      let a, p, len;
+      if (isRev) {
+        a = new THREE.Vector3(q.x, q.y, q.z).normalize();
+        // fixed point of the rotation: solve (I - R) p = t in the plane ⟂ a, then move to c's height along a
+        const R = new THREE.Matrix3().setFromMatrix4(T).elements; // column-major
+        const M = [[1-R[0],-R[3],-R[6]],[-R[1],1-R[4],-R[7]],[-R[2],-R[5],1-R[8]]];
+        const MtM = [[0,0,0],[0,0,0],[0,0,0]], Mtb = [0,0,0], b = [t.x,t.y,t.z], av = [a.x,a.y,a.z];
+        for (let i=0;i<3;i++){ for (let j=0;j<3;j++){ let s=0; for(let k=0;k<3;k++) s+=M[k][i]*M[k][j]; MtM[i][j]=s+av[i]*av[j]; } let s=0; for(let k=0;k<3;k++) s+=M[k][i]*b[k]; Mtb[i]=s; }
+        const m3 = new THREE.Matrix3().set(MtM[0][0],MtM[0][1],MtM[0][2],MtM[1][0],MtM[1][1],MtM[1][2],MtM[2][0],MtM[2][1],MtM[2][2]).invert().elements;
+        p = new THREE.Vector3(m3[0]*Mtb[0]+m3[3]*Mtb[1]+m3[6]*Mtb[2], m3[1]*Mtb[0]+m3[4]*Mtb[1]+m3[7]*Mtb[2], m3[2]*Mtb[0]+m3[5]*Mtb[1]+m3[8]*Mtb[2]);
+        p.add(a.clone().multiplyScalar(c.clone().sub(p).dot(a)));
+        len = Math.max(size.x, size.y, size.z) * 1.35;
+        const cyl = new THREE.Mesh(new THREE.CylinderGeometry(.009, .009, len, 12), mat);
+        cyl.position.copy(p); cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), a);
+        const arc = new THREE.Mesh(new THREE.TorusGeometry(.07, .006, 8, 40, Math.PI * 1.4), mat);
+        arc.position.copy(p).add(a.clone().multiplyScalar(len * .32)); arc.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), a);
+        glyphs.add(cyl, arc);
+      } else {
+        a = t.clone().normalize(); len = Math.max(.32, t.length() * 1.1);
+        const arrow = new THREE.ArrowHelper(a, c.clone().sub(a.clone().multiplyScalar(len * .2)), len, col, .1, .065);
+        arrow.line.material = new THREE.LineBasicMaterial({color: col, depthTest: false, toneMapped: false});
+        arrow.cone.material = mat;
+        const shaft = new THREE.Mesh(new THREE.CylinderGeometry(.013, .013, len - .1, 12), mat);
+        shaft.position.copy(c.clone().sub(a.clone().multiplyScalar(len * .2)).add(a.clone().multiplyScalar((len - .1) / 2)));
+        shaft.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), a);
+        glyphs.add(arrow, shaft);
+      }
+      glyphs.children.forEach(g => g.renderOrder = 10);
+    });
+    group.add(glyphs);
+
+    // actor centres for the HTML labels (top of each cabinet, scene space)
+    const actorBox = actor => { const b = new THREE.Box3(); kf.bodies.forEach((n,i) => { if (n.startsWith(actor + '__') && nodes[i]) b.expandByObject(nodes[i]); }); return b; };
+    return {group, kf, nodes, glyphs, setPose, actorBox};
+  }
+
+  function applyOpen(pair, t){
+    const F = pair.kf.frames, x = t * (F.length - 1), i0 = Math.floor(x), i1 = Math.min(F.length - 1, i0 + 1), w = x - i0;
+    pair.kf.moving.forEach((bi, m) => {
+      const a = F[i0][m], b = F[i1][m], n = pair.nodes[bi]; if (!n) return;
+      n.position.set(a[0] + (b[0]-a[0])*w, a[1] + (b[1]-a[1])*w, a[2] + (b[2]-a[2])*w);
+      tmpQ.set(a[3],a[4],a[5],a[6]); tmpQ2.set(b[3],b[4],b[5],b[6]); n.quaternion.copy(tmpQ).slerp(tmpQ2, w);
+    });
+  }
+
+  const tagL = document.getElementById('tagL'), tagR = document.getElementById('tagR');
+  const jL = document.getElementById('jL'), jR = document.getElementById('jR');
+  let anchors = null;
+  function chipFor(type){ return type === 'revolute' ? '<span class="chip rev">revolute</span>' : '<span class="chip pri">prismatic</span>'; }
+
+  function show(i){
+    vload.style.opacity = 1; vload.textContent = 'Loading 3D';
+    pick.querySelectorAll('button').forEach(b => b.setAttribute('aria-selected', String(+b.dataset.i === i)));
+    fetchPair(PAIRS[i][0]).then(pair => {
+      if (cur) world.remove(cur.group);
+      cur = pair; world.add(pair.group);
+      applyOpen(pair, 0); pair.group.updateMatrixWorld(true);
+      const bL = pair.actorBox('orig'), bR = pair.actorBox('edit');
+      const all = bL.clone().union(bR), c = all.getCenter(new THREE.Vector3()), s = all.getSize(new THREE.Vector3());
+      anchors = [new THREE.Vector3((bL.min.x+bL.max.x)/2, bL.max.y + s.y*.08, (bL.min.z+bL.max.z)/2),
+                 new THREE.Vector3((bR.min.x+bR.max.x)/2, bR.max.y + s.y*.08, (bR.min.z+bR.max.z)/2)];
+      resize();
+      const r = Math.max(s.x, s.y, s.z);
+      // fit the bounding sphere in both the vertical and horizontal field of view
+      const rad = s.length() / 2, vf = camera.fov * Math.PI / 360, hf = Math.atan(Math.tan(vf) * camera.aspect);
+      const dist = rad / Math.sin(Math.min(vf, hf)) * .92;
+      const dirv = new THREE.Vector3(1.3, .55, .8).normalize();
+      controls.target.copy(c);
+      camera.position.copy(c).addScaledVector(dirv, dist);
+      controls.minDistance = dist * .45; controls.maxDistance = dist * 2.2;
+      sun.position.set(c.x + r * 1.2, r * 2.4, c.z + r * 1.4); sun.target.position.copy(c);
+      const sc = sun.shadow.camera; sc.left = sc.bottom = -r; sc.right = sc.top = r; sc.near = .1; sc.far = r * 6; sc.updateProjectionMatrix();
+      fill.position.set(c.x - r, r, c.z - r * 1.5);
+      jL.innerHTML = chipFor(pair.kf.joint_orig.type); jR.innerHTML = chipFor(pair.kf.joint_edit.type);
+      pair.glyphs.visible = reveal;
+      openT = 0; dir = 1; vload.style.opacity = 0;
+    }).catch(err => fallback(i, err));
+  }
+  pick.addEventListener('click', e => { const b = e.target.closest('button'); if (b) show(+b.dataset.i); });
+
+  const slider = document.getElementById('vopen'), playBtn = document.getElementById('vplay'), playIcon = document.getElementById('vplayIcon');
+  function setPlaying(p){
+    playing = p; playBtn.setAttribute('aria-label', p ? 'Pause' : 'Play');
+    playIcon.innerHTML = p ? '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>' : '<path d="M7 4l13 8-13 8z"/>';
+  }
+  playBtn.addEventListener('click', () => setPlaying(!playing));
+  slider.addEventListener('input', () => { setPlaying(false); openT = slider.value / 1000; });
+  const revealBtn = document.getElementById('vreveal');
+  revealBtn.addEventListener('click', () => {
+    reveal = !reveal; revealBtn.setAttribute('aria-pressed', String(reveal)); if (cur) cur.glyphs.visible = reveal;
+  });
+
+  function resize(){
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (canvas.width !== Math.round(w * renderer.getPixelRatio()) || canvas.height !== Math.round(h * renderer.getPixelRatio())) {
+      renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+  }
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) setPlaying(false);
+  let hold = 0, lastT = performance.now();
+  const v = new THREE.Vector3();
+  function tick(now){
+    requestAnimationFrame(tick);
+    const dt = Math.min(.05, (now - lastT) / 1000); lastT = now;
+    if (!visible) return;
+    resize(); controls.update();
+    if (cur) {
+      if (playing) {
+        if (hold > 0) hold -= dt;
+        else { openT += dir * dt / 2.2; if (openT >= 1 || openT <= 0) { openT = Math.max(0, Math.min(1, openT)); dir *= -1; hold = .9; } }
+        slider.value = Math.round(openT * 1000);
+      }
+      const e = openT < .5 ? 2*openT*openT : 1 - Math.pow(-2*openT + 2, 2) / 2;
+      applyOpen(cur, e);
+      if (anchors) {
+        const w = canvas.clientWidth, h = canvas.clientHeight;
+        [[tagL, anchors[0]], [tagR, anchors[1]]].forEach(([el, p]) => {
+          v.copy(p).project(camera);
+          el.style.left = ((v.x + 1) / 2 * w) + 'px'; el.style.top = Math.max(48, (1 - v.y) / 2 * h) + 'px';
+          el.style.opacity = v.z < 1 ? 1 : 0;
+        });
+      }
+    }
+    renderer.render(scene, camera);
+  }
+  if ('IntersectionObserver' in window) new IntersectionObserver(es => { visible = es[0].isIntersecting; }, {rootMargin:'100px'}).observe(canvas);
+  requestAnimationFrame(tick);
+  show(0);
+})();
+</script>
+</body>
+</html>
