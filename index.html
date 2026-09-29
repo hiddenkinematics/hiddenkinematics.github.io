@@ -81,9 +81,10 @@ button{font:inherit;color:inherit}
 .hero h1{font-family:'Google Sans',var(--sans);font-weight:700;font-size:clamp(1.8rem,3.2vw,2.75rem);line-height:1.12;letter-spacing:-.015em;margin:0 auto;text-wrap:balance}
 .hero h1 em{font-style:normal;font-weight:700;color:#a94833}
 .hero h1 .l2{display:block;font-size:.62em;font-weight:400;font-style:normal;color:var(--ink-2);letter-spacing:-.005em;margin-top:.3em}
-.authors{display:flex;flex-wrap:wrap;justify-content:center;gap:.2rem 1.15rem;font-family:'Google Sans',var(--sans);font-weight:500;font-size:1.05rem}
-.authors a{color:var(--ink);text-decoration:underline;text-decoration-color:rgba(22,22,22,.3);text-decoration-thickness:1.5px;text-underline-offset:4px;transition:color .15s,text-decoration-color .15s}
-.authors a:hover{color:#a94833;text-decoration-color:#a94833}
+.authors{display:flex;flex-wrap:wrap;justify-content:center;gap:.2rem .45em;font-family:'Google Sans',var(--sans);font-weight:500;font-size:1.05rem}
+.authors a{color:var(--ink);text-decoration:none;text-decoration-thickness:1.5px;text-underline-offset:4px;transition:color .15s,text-decoration-color .15s}
+.authors a:hover{color:#a94833;text-decoration:underline;text-decoration-color:#a94833}
+.authors span:not(:last-child)::after{content:","}
 .authors sup{color:#a94833;font-weight:500;margin-left:1px}
 .authors span{color:var(--ink)}
 .authors{margin-top:0}
