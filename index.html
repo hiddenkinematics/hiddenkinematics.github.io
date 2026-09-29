@@ -239,6 +239,7 @@ figure{margin:0}
 .pair .meta{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px;padding:10px 4px 2px}
 .pair .meta .what{font-family:var(--serif);font-size:1.15rem;font-weight:600}
 
+.summary-video{display:block;width:100%;margin-top:1rem;border-radius:14px;background:#000;box-shadow:var(--shadow)}
 /* bibtex */
 .bib{position:relative}
 .bib pre{margin:0;background:var(--ink);color:#efe8da;border-radius:14px;padding:22px 24px;overflow-x:auto;font-family:var(--mono);font-size:.82rem;line-height:1.65}
@@ -513,6 +514,15 @@ footer{padding-block:72px 48px;text-align:center;font-size:.84rem;color:var(--st
     </div>
   </div>
   <div class="rail" id="gallery" role="tabpanel"></div>
+</section>
+
+<!-- ================= VIDEO ================= -->
+<section class="sec col" id="video">
+  <div class="label">Video</div>
+  <h2>Summary video</h2>
+  <video class="summary-video" controls muted playsinline preload="metadata" poster="static/posters/summary_video.jpg">
+    <source src="static/videos/summary_video.mp4" type="video/mp4">
+  </video>
 </section>
 
 <!-- ================= BIBTEX ================= -->
